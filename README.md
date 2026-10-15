@@ -169,7 +169,7 @@ Stdout and the exit codes stay as they were. Commits that leave the version alon
 - `--update` pulls, fast-forward only. It refuses, with exit 1, while tracked files have uncommitted changes or
   your clone has commits the remote does not. When the helper's files changed, it reloads the helper the way
   `--self` does. If the helper does not answer, it says a reload is still needed, and the update stands.
-- The helper's popup shows the same answer: "Up to date · v1.5.0", "Update available", or "not checked yet".
+- The helper's popup shows the same answer under its name: "v1.5.0 · Up to date", "Update available", or "Not checked yet". When an update is out, a line at the bottom also says how to get it.
 - `EXT_RELOAD_NO_UPDATE_CHECK=1` turns off the daily check and the notice. `--check-update` and `--update` still
   work when you run them.
 

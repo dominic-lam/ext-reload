@@ -1,9 +1,16 @@
-// The popup's status line: whether a newer ext-reload is out. The CLI's daily check writes update.json next to
-// this page, and an unpacked extension reads its own files fresh from disk. The helper never goes online.
+// The popup's version line under the name, and a footer only when a newer ext-reload is out. The CLI's daily
+// check writes update.json next to this page, and an unpacked extension reads its own files fresh from disk. The
+// helper never goes online.
 
+const ver = document.getElementById('ver');
 const line = document.getElementById('update');
 // Guarded so popup.html still renders opened as a plain file, where there is no chrome.runtime.
 const installed = globalThis.chrome?.runtime?.getManifest?.()?.version;
+
+function sub(version, text) {
+  ver.textContent = version ? `v${version} · ${text}` : text;
+  ver.hidden = false;
+}
 
 function show(...parts) {
   for (const part of parts) {
@@ -16,14 +23,15 @@ function show(...parts) {
 function render(state) {
   const version = state?.current ?? installed;
   if (state?.status === 'available') {
+    sub(version, 'Update available');
     show({ tag: 'strong', text: `Update available: v${state.latest}.` }, ' Ask your coding agent to run ',
       { tag: 'span', cls: 'cmd', text: 'ext-reload.mjs --update' }, '.');
   } else if (state?.status === 'current') {
-    show(`Up to date · v${version}`);
+    sub(version, 'Up to date');
   } else if (state?.status === 'failed') {
-    show(`Version ${version} · could not check for updates`);
+    sub(version, 'Could not check for updates');
   } else {
-    show(installed ? `Version ${installed} · not checked yet` : 'Not checked for updates yet');
+    sub(installed, installed ? 'Not checked yet' : 'Not checked for updates yet');
   }
 }
 
