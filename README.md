@@ -63,11 +63,12 @@ Install ext-reload (https://github.com/dominic-lam/ext-reload) so you can reload
 yourself, and use it from now on.
 1. If ~/ext-reload does not exist, run: git clone https://github.com/dominic-lam/ext-reload.git ~/ext-reload
 2. Run ~/ext-reload/ext-reload.mjs --ping.
-3. If it exits 4, Chrome is closed or the helper is not loaded. Tell me exactly this, then wait: open
-   chrome://extensions, turn on Developer mode, click Load unpacked, pick ~/ext-reload/extension.
-   Then run --ping again.
+3. If the helper is not loaded yet, --ping waits 35 s before it exits 4; that is expected, not a hang. On exit 4,
+   Chrome is closed or the helper is not loaded. Tell me exactly this, then wait: open chrome://extensions, turn
+   on Developer mode, click Load unpacked, pick ~/ext-reload/extension. Then run --ping again.
 4. Once --ping lists my extensions, copy the "Reloading the extension" block from ~/ext-reload/README.md into
-   this project's agent instructions file (AGENTS.md, CLAUDE.md, or whichever file you read), and follow it.
+   the agent instructions file (AGENTS.md, CLAUDE.md, or whichever file you read) of the extension project you
+   are working in, and follow it. If you are not in an extension project, ask me which one.
 ```
 
 ### Option 2: Install it yourself
@@ -95,13 +96,16 @@ inbox relative to itself.
 ```markdown
 ## Reloading the extension
 
-After editing any file of the extension, run `~/ext-reload/ext-reload.mjs` from its folder before testing or
-asking me to look. Never ask me to press Reload at chrome://extensions. Act on the exit code:
+After editing any file of the extension, run `~/ext-reload/ext-reload.mjs` before testing or asking me to look.
+Run it from the folder Chrome loads the extension from, or pass that folder as an argument: the project folder,
+or, for an extension that is built, its build folder (such as `dist/` or `build/`) after building. Never ask me
+to press Reload at chrome://extensions. Act on the exit code:
 
 - 0: reloaded, along with the tabs its content scripts run on. Carry on.
 - 1: read the message and fix the cause.
-- 2: Chrome runs this extension from another folder (usually the main checkout while you work in a worktree).
-  Tell me the folder it names; do not reload that one instead.
+- 2: Chrome has not loaded the extension from this folder. If the project has a build folder, build and run it
+  from there. Otherwise Chrome runs another copy, usually the main checkout while you work in a worktree: tell
+  me, and do not reload that copy instead.
 - 3: manifest.json changed, which this reload cannot pick up. Ask me to press Reload on the extension's card at
   chrome://extensions once, or offer to add the dev-only hook from the ext-reload README so it can.
 - 4: Chrome is not running or the helper is not loaded. Tell me, and point me to the install steps in the
@@ -143,7 +147,7 @@ content script lost its extension is broken until it reloads, so this is what yo
 |---|---|---|
 | 0 | Reloaded | Carry on |
 | 1 | The reload failed, or bad arguments | Read the message |
-| 2 | Chrome has no unpacked extension from this folder | Usually a worktree while Chrome runs the main checkout; the message names the folder Chrome has |
+| 2 | Chrome has no unpacked extension from this folder | For a built extension, run it from the build folder. Otherwise usually a worktree while Chrome runs the main checkout; the message lists the unpacked extensions Chrome has, by name and id |
 | 3 | `manifest.json` changed after Chrome last read it | The Reload button on the extension's card, or add the dev hook |
 | 4 | Chrome is not running, or the helper did not answer within 35 s | Start Chrome, or see Install |
 
@@ -169,7 +173,9 @@ Stdout and the exit codes stay as they were. Commits that leave the version alon
 - `--update` pulls, fast-forward only. It refuses, with exit 1, while tracked files have uncommitted changes or
   your clone has commits the remote does not. When the helper's files changed, it reloads the helper the way
   `--self` does. If the helper does not answer, it says a reload is still needed, and the update stands.
-- When an update is out, the helper's toolbar icon gets a red dot, and its popup shows a prompt to copy for your agent: "Run ~/ext-reload/ext-reload.mjs --update to update ext-reload." Otherwise the popup says "v1.6.0 · Up to date" or "Not checked yet" under its name.
+- When an update is out, the helper's toolbar icon gets a red dot, and its popup shows a prompt to copy for your
+  agent: "Run ~/ext-reload/ext-reload.mjs --update to update ext-reload." Otherwise the popup says "v1.6.0 · Up to
+  date" or "Not checked yet" under its name.
 - `EXT_RELOAD_NO_UPDATE_CHECK=1` turns off the daily check and the notice. `--check-update` and `--update` still
   work when you run them.
 
