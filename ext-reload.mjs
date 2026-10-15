@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -253,6 +254,13 @@ function upstream() {
   }
 }
 
+// This file's path the way the popup's prompt shows it, with the home folder as ~.
+const SELF = fileURLToPath(import.meta.url);
+function shownPath(p) {
+  const home = os.homedir();
+  return p.startsWith(home + path.sep) ? `~${p.slice(home.length)}` : p;
+}
+
 function compare(up) {
   return {
     latest: JSON.parse(git(['show', `${up.ref}:package.json`])).version,
@@ -267,7 +275,9 @@ function checkForUpdate({ background = false, fetchFirst = true } = {}) {
   if (skipped) return { skipped };
   const up = upstream();
   const current = localVersion();
-  const state = { checkedAt: new Date().toISOString(), current, latest: null, behind: null, upstream: up.name };
+  const state = {
+    checkedAt: new Date().toISOString(), current, latest: null, behind: null, upstream: up.name, cli: shownPath(SELF),
+  };
   let error = null;
   if (fetchFirst) {
     try {

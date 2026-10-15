@@ -7,6 +7,7 @@
   :root {
     --page: #eef3f0; --card: #ffffff; --fg: #1b1d22; --muted: #565c68; --line: #e3e7e5;
     --brand: #3ddc97; --ok: #0b7a52; --note-bg: #e6f8ef; --focus: #0b7a52;
+    --warn-bg: #fff3dc; --warn-icon: #b4650a; --warn-line: #efcf96;
     --gh-bg: #f4f5f7; --gh-fg: #1b1d22; --gh-line: #cfd4db;
     --gh-bg-h: #e8eaee; --gh-line-h: #9aa2af;
     --cf-bg: #fff0e1; --cf-fg: #6b2c00; --cf-line: #f0b384; --cf-accent: #e0453f;
@@ -16,6 +17,7 @@
     :root {
       --page: #15171c; --card: #1f2227; --fg: #e8eaee; --muted: #a6acb7; --line: #33373e;
       --ok: #3ddc97; --note-bg: #1c3228; --focus: #3ddc97;
+      --warn-bg: #3a2d14; --warn-icon: #f2b24c; --warn-line: #6b5426;
       --gh-bg: #2a2d34; --gh-fg: #e8eaee; --gh-line: #444955;
       --gh-bg-h: #353942; --gh-line-h: #6d7583;
       --cf-bg: #3a2819; --cf-fg: #ffd9b8; --cf-line: #744d2e; --cf-accent: #ff7f7a;
@@ -52,10 +54,21 @@
   .coffee svg { width: 24px; height: 24px; margin: -2px 0; }
   .coffee .heart { fill: var(--cf-accent); stroke: none; }
   .hint { margin: -4px 0 0; text-align: center; font-size: 14px; line-height: 1.4; color: var(--muted); }
-  .update { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line); text-align: center;
-            font-size: 14px; line-height: 1.4; color: var(--muted); }
-  .update strong { color: var(--fg); font-weight: 600; }
-  .update .cmd { white-space: nowrap; }
+  .note[hidden] { display: none; }
+  .upd { display: grid; gap: 8px; padding: 11px 12px 12px; background: var(--warn-bg); border-radius: 12px; font-size: 14px; }
+  .upd[hidden] { display: none; }
+  .upd .title { display: flex; align-items: center; gap: 9px; font-weight: 600; }
+  .upd .title svg { flex: none; width: 20px; height: 20px; color: var(--warn-icon); }
+  .upd .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .upd .label { color: var(--muted); font-size: 12.5px; line-height: 1.3; }
+  .prompt { display: block; padding: 8px 10px; background: var(--card); border: 1px solid var(--warn-line); border-radius: 9px;
+            font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: break-word; user-select: all; }
+  .copy { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--warn-line);
+          border-radius: 7px; background: transparent; color: var(--fg); cursor: pointer;
+          font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1.4; }
+  .copy svg { width: 13px; height: 13px; }
+  .copy:hover { background: var(--card); }
+  .copy:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:hover { transform: none; } }
 </style>
 </head>
@@ -70,10 +83,24 @@
   </header>
   <p>Lets your coding agent, or any terminal, reload your unpacked extensions and the tabs they run on, so
     nobody has to press Reload at chrome://extensions.</p>
-  <p class="note">
+  <p class="note" id="ok">
     <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" opacity=".18"/><path d="M5.8 10.3l2.9 2.9 5.5-5.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <span>You don't need to do anything here.</span>
   </p>
+  <div class="upd" id="upd" hidden>
+    <div class="title">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor" opacity=".2"/><path d="M10 14.5V6M6.4 9.4 10 5.8l3.6 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="upd-title">Update available</span>
+    </div>
+    <div class="head">
+      <span class="label" id="prompt-label">Prompt for your agent</span>
+      <button class="copy" id="copy" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 3.5v-.4A1.6 1.6 0 0 0 8.9 1.5H3.1A1.6 1.6 0 0 0 1.5 3.1v5.8a1.6 1.6 0 0 0 1.6 1.6h.4"/></svg>
+        <span>Copy</span>
+      </button>
+    </div>
+    <code class="prompt" id="prompt" aria-labelledby="prompt-label"></code>
+  </div>
   <nav class="links">
     <a class="btn gh" href="https://github.com/dominic-lam/ext-reload" target="_blank" rel="noopener" aria-label="ext-reload is open source on GitHub (opens in a new tab)" title="github.com/dominic-lam/ext-reload">
       <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
@@ -91,7 +118,6 @@
     </a>
     <p class="hint">Totally optional, but appreciated.</p>
   </nav>
-  <p class="update" id="update" hidden></p>
 </main>
 <script src="popup.js"></script>
 </body>

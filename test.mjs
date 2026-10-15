@@ -139,6 +139,20 @@ try {
   r = await run(stranger);
   check(`folder Chrome did not load, same name as a loaded one: exit 2, names the other folder (${r.ms} ms)`, r.code === 2 && /different folder/.test(r.out), r.out);
 
+  // The red dot: the worker reads update.json every 20 s; calling its check directly skips the wait. A drawing
+  // or setIcon failure rejects, which fails the check.
+  const helper = ctx.serviceWorkers().find(sw => sw.url().includes(HELPER_ID));
+  const updateFile = path.join(tool, 'extension', 'update.json');
+  const dot = async status => {
+    fs.writeFileSync(updateFile, JSON.stringify({ status, current: '1.0.0', latest: '9.0.0' }));
+    return helper.evaluate(() => updateDot()).catch(e => `threw: ${e.message}`);
+  };
+  let d = await dot('available');
+  check('update available: the toolbar icon gets the red dot', d === true, String(d));
+  d = await dot('current');
+  check('  and loses it once up to date', d === false, String(d));
+  fs.rmSync(updateFile);
+
   let helperStarts = 0;
   ctx.on('serviceworker', sw => { if (sw.url().includes(HELPER_ID)) helperStarts++; });
   r = await run('--self');

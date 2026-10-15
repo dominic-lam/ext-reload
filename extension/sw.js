@@ -47,6 +47,47 @@ chrome.alarms.create('wake', { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(() => {});
 chrome.runtime.onStartup.addListener(() => chrome.storage.local.set({ browserStart: Date.now() }));
 
+// A red dot on the toolbar icon while a newer ext-reload is out. The CLI's daily check writes update.json in
+// this folder; the worker reads it when it starts and every 20 s. A full reload, which --update does when the
+// helper's files changed, puts the manifest's icon back by itself.
+const UPDATE = chrome.runtime.getURL('update.json');
+let dotted = null;
+
+async function updateDot() {
+  const state = await fetch(UPDATE, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  const want = state?.status === 'available';
+  if (want === dotted) return dotted;
+  await chrome.action.setIcon(want ? { imageData: await dottedIcons() } : { path: chrome.runtime.getManifest().action.default_icon });
+  return (dotted = want);
+}
+
+async function dottedIcons() {
+  const icons = {};
+  for (const size of [16, 32]) {
+    const bitmap = await createImageBitmap(await (await fetch(chrome.runtime.getURL(`icons/icon-${size}.png`))).blob());
+    const g = new OffscreenCanvas(size, size).getContext('2d');
+    g.drawImage(bitmap, 0, 0, size, size);
+    const r = size * 0.21;
+    const x = size - r - size * 0.03;
+    const y = r + size * 0.03;
+    g.globalCompositeOperation = 'destination-out';  // a clear ring, so the dot stands off the icon
+    g.beginPath();
+    g.arc(x, y, r + size * 0.09, 0, 2 * Math.PI);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
+    g.fillStyle = '#ef4444';
+    g.beginPath();
+    g.arc(x, y, r, 0, 2 * Math.PI);
+    g.fill();
+    icons[size] = g.getImageData(0, 0, size, size);
+  }
+  return icons;
+}
+
+const refreshDot = () => updateDot().catch(() => {});  // tried again on the next tick
+refreshDot();
+setInterval(refreshDot, 20_000);
+
 // Chrome reads an unpacked manifest.json only at browser start and on a full reload (the Reload button,
 // chrome.runtime.reload). Remember when, so the CLI can tell whether a manifest edit is loaded.
 chrome.management.onInstalled.addListener(async info => {
