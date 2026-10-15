@@ -215,13 +215,14 @@ const iconSvg = fs.readFileSync(path.join(ASSETS, 'icon.svg'), 'utf8');
 
 // ---------------------------------------------------------------- 3. the frames
 
-// Beat 0, "without ext-reload", is PRE_TICKS ticks long (3.6 s; the reply is up for 3.3 s of it) and comes before the beats below, whose times
+// Beat 0, "without ext-reload", is PRE_TICKS ticks long (5.6 s; the reply is up for 5.3 s of it) and comes before the beats below, whose times
 // count from the end of it.
-const PRE_TICKS = 45;
+const PRE_TICKS = 70;
 const BEATS = { before: 0, edit: 2.0, reload: 4.5, after: 7.0, end: 9.5, total: 11.5 };
 const MAIN_TICKS = Math.round(BEATS.total / TICK);
 const TOTAL_SECONDS = (PRE_TICKS + MAIN_TICKS) * TICK;
-const AGENT_REPLY = 'Done. Open chrome://extensions, press Reload on Dark Mode Demo, then refresh the page.';
+// HTML: the page name is inline code, coloured the way agent terminals show it.
+const AGENT_REPLY = 'Done: Reload on <span class="code">chrome://extensions</span>, then refresh the page.';
 
 const CAPTIONS = {
   x: 'Without ext-reload, your agent stops and asks you',
@@ -280,7 +281,7 @@ function problemState(tick) {
   ];
   if (tick >= 4) {
     rows.push({ cls: 'gap' });
-    rows.push({ cls: 'reply', html: `<span class="dot">&#9679;</span> ${esc(AGENT_REPLY)}` });
+    rows.push({ cls: 'reply', html: `<span class="dot">&#9679;</span> ${AGENT_REPLY}` });
     rows.push({ cls: 'gap' });
     // the prompt waits for the human; the cursor blinks
     rows.push({ cls: 'dim', html: `<span class="p dimp">&rsaquo;</span>${Math.floor(tick / 6) % 2 === 0 ? '<span class="cur dimcur"></span>' : ''}` });
@@ -320,6 +321,7 @@ html, body { margin: 0; width: ${W}px; height: ${H}px; background: #0d1117; over
 .stat { color: #8b949e; margin-left: 6px; }
 .g { color: #3fb950; } .r { color: #f85149; }
 .cmd { color: #f0f3f6; }
+.code { color: #79c0ff; }
 .diff { display: flex; }
 .diff .n { color: #6e7681; width: 3ch; flex: none; text-align: right; margin-right: 1ch; }
 .diff .m { width: 2ch; flex: none; }
