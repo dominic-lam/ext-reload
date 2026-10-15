@@ -66,9 +66,10 @@ yourself, and use it from now on.
 3. If the helper is not loaded yet, --ping waits 35 s before it exits 4; that is expected, not a hang. On exit 4,
    Chrome is closed or the helper is not loaded. Tell me exactly this, then wait: open chrome://extensions, turn
    on Developer mode, click Load unpacked, pick ~/ext-reload/extension. Then run --ping again.
-4. Once --ping lists my extensions, copy the "Reloading the extension" block from ~/ext-reload/README.md into
-   the agent instructions file (AGENTS.md, CLAUDE.md, or whichever file you read) of the extension project you
-   are working in, and follow it. If you are not in an extension project, ask me which one.
+4. Once --ping lists my extensions, ask me whether ext-reload should apply to one extension project or to all my
+   projects. Then copy the rules under "The instruction for your agent" in ~/ext-reload/README.md into the
+   instructions file I chose: that project's (AGENTS.md, CLAUDE.md, or whichever file you read), or your global
+   one for all projects. Follow them from then on.
 ```
 
 ### Option 2: Install it yourself
@@ -81,7 +82,7 @@ yourself, and use it from now on.
    `~/ext-reload/extension`.
 3. Run `~/ext-reload/ext-reload.mjs --ping`. It lists the unpacked extensions Chrome has.
 4. Add the instruction below to your project's agent instructions file (`AGENTS.md`, `CLAUDE.md`, or whichever
-   file your agent reads).
+   file your agent reads), or to your agent's global instructions file to use it in every project.
 
 Keep the helper loaded from your clone: Chrome reads the helper's files from wherever it was loaded, and the
 CLI writes its requests into the `extension/inbox/` folder next to itself. The helper's id is
