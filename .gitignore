@@ -1,4 +1,8 @@
 node_modules/
 # Requests from the CLI to the helper; created on first use.
 extension/inbox/
+# The update check's result, which the helper's popup reads, and its lock. Written by the CLI.
+extension/update.json
+extension/update.json.tmp
+extension/update.lock
 .DS_Store

@@ -1,19 +1,26 @@
 #!/usr/bin/env node
 // Reload an unpacked extension in your running Chrome through the ext-reload helper extension, then reload
-// the tabs its content scripts run on. Setup, the dev hook and exit codes: README.md.
+// the tabs its content scripts run on. Setup, the dev hook, updates and exit codes: README.md.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+const SCRIPT = fileURLToPath(import.meta.url);
+const HERE = path.dirname(SCRIPT);
 const INBOX = path.join(HERE, 'extension', 'inbox');
 const EXIT = { ok: 0, failed: 1, notLoaded: 2, staleManifest: 3, noHelper: 4 };
 const NOTICE_MS = 3000;
 const WAKE_MS = 35_000;  // the helper's alarm restarts a stopped worker every 30 s
+const UPDATE_FILE = path.join(HERE, 'extension', 'update.json');  // the helper's popup reads it too
+const UPDATE_LOCK = path.join(HERE, 'extension', 'update.lock');
+const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
+const FETCH_MS = 15_000;
+const LOCK_STALE_MS = 60_000;
+const BACKGROUND = '--update-check-background';  // internal: the detached daily check
 
 const USAGE = `Usage: ext-reload.mjs [extension folder] [options]
 
@@ -26,10 +33,13 @@ manifest.json), then reloads the tabs its content scripts match.
   --all              reload every unpacked extension that is turned on
   --ping             check the helper answers, and list the unpacked extensions Chrome has
   --self             reload the helper itself, after editing its code
-  --timeout <s>      how long to wait for the result once the helper has the request (default 20)`;
+  --timeout <s>      how long to wait for the result once the helper has the request (default 20)
+  --check-update     check now whether a newer ext-reload is out
+  --update           update ext-reload (git pull, fast-forward only), then reload the helper if it changed`;
 
 function parseArgs(argv) {
-  const opts = { dir: null, tabs: null, noTabs: false, ids: [], all: false, ping: false, self: false, timeout: 20 };
+  const opts = { dir: null, tabs: null, noTabs: false, ids: [], all: false, ping: false, self: false, timeout: 20,
+    checkUpdate: false, update: false, background: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--tabs') (opts.tabs ??= []).push(argv[++i]);
@@ -39,6 +49,9 @@ function parseArgs(argv) {
     else if (a === '--ping') opts.ping = true;
     else if (a === '--self') opts.self = true;
     else if (a === '--timeout') opts.timeout = Number(argv[++i]);
+    else if (a === '--check-update') opts.checkUpdate = true;
+    else if (a === '--update') opts.update = true;
+    else if (a === BACKGROUND) opts.background = true;
     else if (a === '-h' || a === '--help') { console.log(USAGE); process.exit(EXIT.ok); }
     else if (a.startsWith('-')) fail(EXIT.failed, `Unknown option ${a}\n\n${USAGE}`);
     else opts.dir = a;
@@ -176,8 +189,262 @@ function listExtensions(extensions) {
   return extensions.map(e => `  ${e.name} ${e.version}  ${e.id}${e.enabled ? '' : '  (turned off)'}`).join('\n') || '  (none)';
 }
 
+// Updates. A git clone asks its own remote whether it is behind, at most once a day, in a detached process
+// started after a command has finished. The answer lives in extension/update.json, where the helper's popup
+// reads it as well; the helper itself never contacts the network.
+
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function localVersion() {
+  return readJson(path.join(HERE, 'package.json'))?.version
+    ?? readJson(path.join(HERE, 'extension', 'manifest.json'))?.version ?? null;
+}
+
+// Whether version a is newer than version b, compared as dotted numbers.
+function newer(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0;
+  }
+  return false;
+}
+
+function git(args, { timeout, background = false } = {}) {
+  return execFileSync('git', ['-C', HERE, ...args], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout,
+    // In the background nobody can answer a password prompt, so git must fail instead of waiting for one.
+    env: background ? { ...process.env, GIT_TERMINAL_PROMPT: '0' } : process.env,
+  }).trimEnd();
+}
+
+function gitError(err, what) {
+  if (err.code === 'ETIMEDOUT') return `${what} took longer than ${FETCH_MS / 1000} s`;
+  const first = String(err.stderr ?? '').split('\n').map(l => l.trim()).find(Boolean);
+  return `${what} failed: ${first ?? err.message}`;
+}
+
+// Only a folder that is the top of its own git clone has anything to update: not a copy (the tests make one),
+// and not a copy vendored inside another project's repo.
+function cloneProblem() {
+  try {
+    const top = git(['rev-parse', '--show-toplevel']);
+    return fs.realpathSync(top) === fs.realpathSync(HERE) ? null : 'this copy of ext-reload is not a git clone';
+  } catch (err) {
+    return err.code === 'ENOENT' ? 'git is not installed' : 'this copy of ext-reload is not a git clone';
+  }
+}
+
+// The current branch's upstream, else origin/main.
+function upstream() {
+  try {
+    const ref = git(['rev-parse', '--symbolic-full-name', '@{u}']);
+    const remote = git(['config', `branch.${git(['symbolic-ref', '--short', 'HEAD'])}.remote`]);
+    return { remote, ref, name: ref.replace(/^refs\/remotes\//, '') };
+  } catch {
+    return { remote: 'origin', ref: 'refs/remotes/origin/main', name: 'origin/main' };
+  }
+}
+
+function compare(up) {
+  return {
+    latest: JSON.parse(git(['show', `${up.ref}:package.json`])).version,
+    behind: Number(git(['rev-list', '--count', `HEAD..${up.ref}`])),
+  };
+}
+
+// Fetch (unless the caller just did), compare HEAD with the upstream, and write update.json. A failed fetch is
+// recorded, never thrown. Returns { skipped } and writes nothing when this copy cannot be checked at all.
+function checkForUpdate({ background = false, fetchFirst = true } = {}) {
+  const skipped = cloneProblem();
+  if (skipped) return { skipped };
+  const up = upstream();
+  const current = localVersion();
+  const state = { checkedAt: new Date().toISOString(), current, latest: null, behind: null, upstream: up.name };
+  let error = null;
+  if (fetchFirst) {
+    try {
+      git(['fetch', '--quiet', up.remote], { timeout: FETCH_MS, background });
+    } catch (err) {
+      error = gitError(err, `git fetch ${up.remote}`);
+    }
+  }
+  try {
+    Object.assign(state, compare(up));  // after a failed fetch, from what the last good one brought
+  } catch (err) {
+    error ??= gitError(err, `reading ${up.name}`);
+  }
+  state.status = state.latest != null && newer(state.latest, current) ? 'available' : error ? 'failed' : 'current';
+  if (error) state.error = error;
+  try {
+    const tmp = `${UPDATE_FILE}.tmp`;
+    fs.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`);
+    fs.renameSync(tmp, UPDATE_FILE);  // atomic, like the inbox: the popup never reads half a file
+  } catch {}
+  return state;
+}
+
+function commits(n) {
+  return `${n} commit${n === 1 ? '' : 's'}`;
+}
+
+// A background check may be fetching right now, and two fetches at once can trip over git's ref locks.
+async function waitForBackgroundCheck() {
+  const end = Date.now() + FETCH_MS + 5000;
+  while (Date.now() < end) {
+    try {
+      if (Date.now() - fs.statSync(UPDATE_LOCK).mtimeMs >= LOCK_STALE_MS) return;
+    } catch {
+      return;  // no lock: nothing running
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+}
+
+async function printCheck() {
+  await waitForBackgroundCheck();
+  const s = checkForUpdate();
+  if (s.skipped) fail(EXIT.failed, `Could not check for updates: ${s.skipped}.`);
+  if (s.error) fail(EXIT.failed, `Could not check for updates: ${s.error}.`);
+  if (s.status === 'available') {
+    console.log(`ext-reload ${s.latest} is available (you have ${s.current}; ${commits(s.behind)} behind ${s.upstream}). Run ext-reload.mjs --update.`);
+  } else if (s.behind > 0) {
+    console.log(`ext-reload ${s.current} is up to date. ${s.upstream} has ${commits(s.behind)} more but no new version; --update pulls them anyway.`);
+  } else {
+    console.log(`ext-reload ${s.current} is up to date with ${s.upstream}.`);
+  }
+  return EXIT.ok;
+}
+
+async function update(opts) {
+  const problem = cloneProblem();
+  if (problem) fail(EXIT.failed, `Cannot update: ${problem}. Get the current version from https://github.com/dominic-lam/ext-reload.`);
+  const dirty = git(['status', '--porcelain', '--untracked-files=no']);
+  if (dirty) {
+    fail(EXIT.failed, `Not updating: these tracked files have uncommitted changes, which the update could overwrite.\n${dirty}\nCommit or discard them, then run --update again.`);
+  }
+  const up = upstream();
+  await waitForBackgroundCheck();
+  try {
+    git(['fetch', '--quiet', up.remote], { timeout: FETCH_MS });
+  } catch (err) {
+    fail(EXIT.failed, `Could not update: ${gitError(err, `git fetch ${up.remote}`)}.`);
+  }
+  const before = localVersion();
+  let behind;
+  try {
+    behind = compare(up).behind;
+  } catch (err) {
+    fail(EXIT.failed, `Could not update: ${gitError(err, `reading ${up.name}`)}.`);
+  }
+  if (behind === 0) {
+    checkForUpdate({ fetchFirst: false });
+    console.log(`ext-reload ${before} is already up to date with ${up.name}.`);
+    return EXIT.ok;
+  }
+  // git pull --ff-only, in two steps: the fetch above, so this one can say why it cannot fast-forward.
+  try {
+    git(['merge-base', '--is-ancestor', 'HEAD', up.ref]);
+  } catch {
+    fail(EXIT.failed, `Not updating: this clone has commits that ${up.name} does not, so it cannot fast-forward. Move them to a branch of their own, or reset to ${up.name} if you do not need them.`);
+  }
+  const oldHead = git(['rev-parse', 'HEAD']);
+  try {
+    git(['merge', '--ff-only', '--quiet', up.ref]);
+  } catch (err) {
+    fail(EXIT.failed, `Could not update: ${gitError(err, `git merge --ff-only ${up.name}`)}.`);
+  }
+  const after = localVersion();
+  const helperChanged = git(['diff', '--name-only', oldHead, 'HEAD', '--', 'extension']) !== '';
+  console.log(before === after
+    ? `Updated ext-reload ${after} (${commits(behind)}, same version).`
+    : `Updated ext-reload ${before} → ${after} (${commits(behind)}).`);
+  console.log(helperChanged ? await reloadHelper(opts) : 'The helper did not change; nothing to reload.');
+  checkForUpdate({ fetchFirst: false });
+  return EXIT.ok;
+}
+
+// Chrome runs the old helper until a full reload, the one --self asks for. Not reaching it is reported, but
+// the update itself has worked.
+async function reloadHelper(opts) {
+  const still = 'Run ext-reload.mjs --self once --ping answers, or press Reload on the helper\'s card at chrome://extensions.';
+  if (chromeIsRunning() === false) return 'Chrome is not running; it loads the new helper when it next starts.';
+  try {
+    await send({ action: 'reload-self' }, opts.timeout);
+  } catch {
+    return `Reload still needed: the helper did not answer, so Chrome still runs the old one. ${still}`;
+  }
+  await new Promise(r => setTimeout(r, 1000));  // the helper reloads 300 ms after answering
+  try {
+    const reply = await send({ action: 'ping' }, opts.timeout);
+    return `Helper reloaded: Chrome now runs helper ${reply.helperVersion}.`;
+  } catch {
+    return 'The helper reloaded itself but has not answered since. Look for an error on its card at chrome://extensions.';
+  }
+}
+
+// Due when there is no answer yet, the last check is over a day old (or in the future: the clock moved), or
+// the version changed since it, after a git pull by hand.
+function checkDue(state, mine) {
+  const age = Date.now() - Date.parse(state?.checkedAt);
+  return !(age >= 0 && age < CHECK_EVERY_MS) || state.current !== mine;
+}
+
+// One check at a time: an agent reloading every few seconds would otherwise start one per run.
+function takeLock() {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.closeSync(fs.openSync(UPDATE_LOCK, 'wx'));
+      return true;
+    } catch (err) {
+      if (err.code !== 'EEXIST') return false;
+      try {
+        if (Date.now() - fs.statSync(UPDATE_LOCK).mtimeMs < LOCK_STALE_MS) return false;
+      } catch {}
+      fs.rmSync(UPDATE_LOCK, { force: true });  // left by a check that died
+    }
+  }
+  return false;
+}
+
+// Runs as the process exits, whatever the command did: one line on stderr when a newer version is out, and
+// the daily check, detached so this process exits without waiting for it. Stdout and the exit code are left
+// alone; agents act on them.
+function afterRun() {
+  if (process.env.EXT_RELOAD_NO_UPDATE_CHECK) return;
+  try {
+    const state = readJson(UPDATE_FILE);
+    const mine = localVersion();
+    if (state?.status === 'available' && newer(state.latest, mine)) {
+      console.error(`ext-reload ${state.latest} is available (you have ${mine}). Run ext-reload.mjs --update.`);
+    }
+    if (checkDue(state, mine) && fs.existsSync(path.join(HERE, '.git')) && takeLock()) {
+      const child = spawn(process.execPath, [SCRIPT, BACKGROUND], { detached: true, stdio: 'ignore', windowsHide: true });
+      child.on('error', () => {});
+      child.unref();
+    }
+  } catch {}
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.background) {
+    try {
+      checkForUpdate({ background: true });
+    } finally {
+      fs.rmSync(UPDATE_LOCK, { force: true });
+    }
+    return EXIT.ok;
+  }
+  if (opts.checkUpdate) return await printCheck();
+  if (opts.update) return await update(opts);
   if (chromeIsRunning() === false) {
     fail(EXIT.noHelper, 'Chrome is not running. If it is, under a process name this check does not know (another channel, or another Chromium-based browser), set EXT_RELOAD_SKIP_CHROME_CHECK=1.');
   }
@@ -254,4 +521,6 @@ async function main() {
   return code;
 }
 
+// Registered before anything can exit: --help and every failure exit through process.exit.
+if (!['--update', '--check-update', BACKGROUND].some(a => process.argv.includes(a))) process.on('exit', afterRun);
 process.exitCode = await main();

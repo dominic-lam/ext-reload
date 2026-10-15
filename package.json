@@ -1,6 +1,6 @@
 {
   "name": "ext-reload",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Reload an unpacked Chrome extension from the command line, so your coding agent never asks you to press Reload at chrome://extensions.",
   "license": "MIT",
@@ -9,7 +9,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node test.mjs"
+    "test": "node test.mjs && node test-update.mjs"
   },
   "devDependencies": {
     "playwright": "^1.64.1"

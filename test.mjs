@@ -13,7 +13,8 @@ import { chromium } from 'playwright';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-// The copy starts without extension/inbox/, the way a fresh clone does, so the CLI must create it.
+// The copy starts without extension/inbox/, the way a fresh clone does, so the CLI must create it. It is not a
+// git clone, so it runs no update check; test-update.mjs covers that.
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ext-reload-test-')));
 const tool = path.join(tmp, 'tool');
 const helperSrc = path.join(HERE, 'extension');
@@ -21,7 +22,7 @@ fs.mkdirSync(tool);
 fs.copyFileSync(path.join(HERE, 'ext-reload.mjs'), path.join(tool, 'ext-reload.mjs'));
 fs.cpSync(helperSrc, path.join(tool, 'extension'), {
   recursive: true,
-  filter: src => path.relative(helperSrc, src).split(path.sep)[0] !== 'inbox',
+  filter: src => !/^(inbox|update\.)/.test(path.relative(helperSrc, src).split(path.sep)[0]),
 });
 
 const HELPER_ID = 'aedmcelajgmppcepfnehdcnpolaeoajp';  // from the key in extension/manifest.json

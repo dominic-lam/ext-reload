@@ -25,6 +25,7 @@ A typical run:
 
 - **Node.js 16 or newer** for the CLI. It uses only Node's standard library, so there is nothing to install.
 - **Node.js 20 or newer** to run the tests, because Playwright 1.64 needs it.
+- **git**, which you install it with, also runs the daily update check and `--update`.
 - **Chrome 110 or newer.** The helper keeps its service worker awake with an API call every 20 s, which resets
   the worker's idle timer only from Chrome 110.
 - **Developer mode on** at `chrome://extensions`. Load unpacked needs it anyway. Leave it on: from Chromium
@@ -82,7 +83,7 @@ yourself, and use it from now on.
 Keep the helper loaded from your clone: Chrome reads the helper's files from wherever it was loaded, and the
 CLI writes its requests into the `extension/inbox/` folder next to itself. The helper's id is
 `aedmcelajgmppcepfnehdcnpolaeoajp` wherever it lives, fixed by the `key` in `extension/manifest.json`.
-Clicking the helper's toolbar icon shows what it is; there is nothing to set.
+Clicking the helper's toolbar icon shows what it is and whether an update is out; there is nothing to set.
 
 ## The instruction for your agent
 
@@ -105,6 +106,7 @@ asking me to look. Never ask me to press Reload at chrome://extensions. Act on t
   ext-reload README.
 
 Tabs playing sound are skipped on purpose and named in the output; do not reload them yourself.
+If ext-reload prints an update notice, tell me; run it with `--update` only when I say so.
 ```
 
 ## What a reload covers
@@ -142,6 +144,40 @@ content script lost its extension is broken until it reloads, so this is what yo
 | 2 | Chrome has no unpacked extension from this folder | Usually a worktree while Chrome runs the main checkout; the message names the folder Chrome has |
 | 3 | `manifest.json` changed after Chrome last read it | The Reload button on the extension's card, or add the dev hook |
 | 4 | Chrome is not running, or the helper did not answer within 35 s | Start Chrome, or see Install |
+
+`--check-update` and `--update` use only 0 and 1: 1 means it could not check, or did not update, and the
+message says why. A helper that could not be reloaded after an update is reported with exit 0, because the
+update itself worked.
+
+## Updates
+
+Once a day, ext-reload checks whether your clone is behind. The only thing it contacts is your clone's own git
+remote, with `git fetch` (the current branch's upstream, else `origin/main`): no GitHub API, nothing else. The
+check runs in a detached background process after a command has finished, so no command waits for it. A fetch
+that fails, offline for instance, is noted and never printed.
+
+When a newer version is out, every run adds one line to stderr:
+
+    ext-reload 1.6.0 is available (you have 1.5.0). Run ext-reload.mjs --update.
+
+Stdout and the exit codes stay as they were. Commits that leave the version alone (docs, tests) bring no notice.
+
+- `--check-update` checks now and says which: up to date, an update is available, or it could not check, and
+  why (exit 1).
+- `--update` pulls, fast-forward only. It refuses, with exit 1, while tracked files have uncommitted changes or
+  your clone has commits the remote does not. When the helper's files changed, it reloads the helper the way
+  `--self` does. If the helper does not answer, it says a reload is still needed, and the update stands.
+- The helper's popup shows the same answer: "Up to date · v1.5.0", "Update available", or "not checked yet".
+- `EXT_RELOAD_NO_UPDATE_CHECK=1` turns off the daily check and the notice. `--check-update` and `--update` still
+  work when you run them.
+
+The answer lives in `extension/update.json`, which the CLI writes and the popup reads; the helper itself never
+goes online. Like `extension/inbox/`, it is not tracked by git. A copy that is not a git clone, such as a
+downloaded zip, skips the check.
+
+Versions before 1.5.0 have no `--update`. Update those once by hand:
+
+    git -C ~/ext-reload pull --ff-only && ~/ext-reload/ext-reload.mjs --self
 
 ## The dev hook: full reloads, manifest included
 
@@ -222,6 +258,11 @@ End to end in Playwright's own Chromium, on a temporary copy of the CLI and the 
 everyday Chrome never sees a test request. It covers code edits, the tab reload, the manifest check (exit 3),
 the dev hook's full reload, a folder Chrome does not have (exit 2), an id worked out through a symlink,
 `--self` restarting exactly once, and a copy with no `extension/inbox/` yet, as in a fresh clone.
+
+`test-update.mjs`, which `npm test` runs next, covers updates against a local bare repo standing in for GitHub,
+with no network: a copy that is not a git clone, up to date, the 24-hour gate, a newer version (the notice on
+stderr, stdout and exit codes unchanged), the opt-out variable, an unreachable remote, and `--update` refusing
+on uncommitted changes or a diverged clone, fast-forwarding, and reloading the helper in Playwright's Chromium.
 
 The test loads extensions over CDP (`Extensions.loadUnpacked`). That differs from the Load unpacked button in
 one way: Chrome removes CDP-installed extensions at its next start (see Why not Chrome DevTools MCP). The tests
