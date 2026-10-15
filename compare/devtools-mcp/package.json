@@ -1,0 +1,8 @@
+{
+  "name": "ext-reload-compare-devtools-mcp",
+  "private": true,
+  "description": "Re-runs the 2026-10-14 check of chrome-devtools-mcp's reload_extension against a hand-loaded extension",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1"
+  }
+}

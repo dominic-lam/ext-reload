@@ -1,0 +1,4 @@
+node_modules/
+# Requests from the CLI to the helper; created on first use.
+extension/inbox/
+.DS_Store
