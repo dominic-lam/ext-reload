@@ -6,6 +6,8 @@ Your coding agent edits your Chrome extension, then stops and asks you to press 
 It has no other way: browser automation cannot touch that page, and an unpacked extension keeps running its old
 code until something reloads it.
 
+![Without ext-reload, the agent asks you to press Reload. With it, the agent edits content.js, runs ext-reload, and the open tab turns dark.](assets/demo.gif)
+
 ext-reload is a command-line tool and a small helper extension. One command reloads the unpacked extension in
 the current folder, in the Chrome you already have open, then reloads the tabs its content scripts run on. It
 takes about a quarter of a second and works for anything that can run a shell command: Claude Code, Codex,
@@ -51,7 +53,7 @@ untested.
 
 Once per machine and per Chrome profile. Pick one way.
 
-### Option 1: ask your coding agent
+### Option 1: Prompt your coding agent
 
 Paste this into Claude Code, Codex, Cursor, or any agent that can run shell commands. It does everything except
 loading the helper into Chrome, which Chrome keeps for you; the agent tells you the three clicks.
@@ -68,7 +70,7 @@ yourself, and use it from now on.
    this project's agent instructions file (AGENTS.md, CLAUDE.md, or whichever file you read), and follow it.
 ```
 
-### Option 2: install it yourself
+### Option 2: Install it yourself
 
 1. Clone it. Any folder works; the examples here use `~/ext-reload`.
 
