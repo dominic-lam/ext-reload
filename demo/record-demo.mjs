@@ -9,7 +9,9 @@
 // CLI's stdout, its exit code, the elapsed time and the diff in the video all come from that run.
 //
 // What is staged: the terminal panel is drawn in HTML from those captured values (typed command, lines revealed
-// one by one, the agent's task line), and the browser window is drawn around the real screenshots. The only
+// one by one, the agent's task line), and the browser window is drawn around the real screenshots. The opening
+// "without ext-reload" beat is staged entirely: AGENT_REPLY is a line written for the video, not an agent's output;
+// the edit it follows and the light page next to it are the real ones. The only
 // rewrites of captured text are in display(): the temp path of the CLI becomes ~/ext-reload, other temp paths are
 // trimmed. The script logs each rewrite it made.
 //
@@ -213,10 +215,17 @@ const iconSvg = fs.readFileSync(path.join(ASSETS, 'icon.svg'), 'utf8');
 
 // ---------------------------------------------------------------- 3. the frames
 
+// Beat 0, "without ext-reload", is PRE_TICKS ticks long (2.48 s) and comes before the beats below, whose times
+// count from the end of it.
+const PRE_TICKS = 31;
 const BEATS = { before: 0, edit: 2.0, reload: 4.5, after: 7.0, end: 9.5, total: 11.5 };
+const MAIN_TICKS = Math.round(BEATS.total / TICK);
+const TOTAL_SECONDS = (PRE_TICKS + MAIN_TICKS) * TICK;
+const AGENT_REPLY = 'Done. Open chrome://extensions, press Reload on Dark Mode Demo, then refresh the page.';
 
 const CAPTIONS = {
-  a: 'Your coding agent changes your extension',
+  x: 'Without ext-reload, your agent stops and asks you',
+  a: '<em>With ext-reload,</em> your coding agent changes your extension',
   b: '&hellip;then reloads it itself',
   c: 'No trip to chrome://extensions. <em>Nobody pressed Reload.</em>',
 };
@@ -261,6 +270,24 @@ function terminalAt(t) {
   return rows;
 }
 
+// Beat 0: the same request, the edit collapsed to its header, then the agent handing the reload back to the human.
+// The page is the real light screenshot, unchanged.
+function problemState(tick) {
+  const rows = [
+    { cls: 'dim', html: '<span class="p">&rsaquo;</span> make the extension turn pages dark' },
+    { cls: 'gap' },
+    { cls: 'head', html: `<span class="dot">&#9679;</span> Edit <b>content.js</b> <span class="stat"><span class="g">+${added}</span></span>` },
+  ];
+  if (tick >= 4) {
+    rows.push({ cls: 'gap' });
+    rows.push({ cls: 'reply', html: `<span class="dot">&#9679;</span> ${esc(AGENT_REPLY)}` });
+    rows.push({ cls: 'gap' });
+    // the prompt waits for the human; the cursor blinks
+    rows.push({ cls: 'dim', html: `<span class="p dimp">&rsaquo;</span>${Math.floor(tick / 6) % 2 === 0 ? '<span class="cur dimcur"></span>' : ''}` });
+  }
+  return { scene: 'main', caption: 'x', after: false, rows };
+}
+
 function stateAt(t) {
   if (t >= BEATS.end) return { scene: 'end' };
   const caption = t < BEATS.reload ? 'a' : t < BEATS.after ? 'b' : 'c';
@@ -275,7 +302,9 @@ html, body { margin: 0; width: ${W}px; height: ${H}px; background: #0d1117; over
   font-family: -apple-system, "SF Pro Display", system-ui, sans-serif; }
 .cap { position: absolute; left: 0; top: 0; width: ${W}px; height: 68px; background: #161b22; border-bottom: 1px solid #2a313c;
   display: flex; align-items: center; justify-content: center; color: #f0f3f6; font-size: 31px; font-weight: 700; letter-spacing: -.2px; }
-.cap em { font-style: normal; color: #3ddc97; margin-left: .3em; }
+.cap em { font-style: normal; color: #3ddc97; }
+.cap.bad span { color: #e5a050; }
+.cap.bad { border-bottom-color: #5a4220; }
 .term { position: absolute; left: 20px; top: 84px; width: 540px; height: 575px; background: #161b22; border: 1px solid #2a313c;
   border-radius: 12px; overflow: hidden; font: 18px/28px ${FONT_MONO}; color: #e6edf3; }
 .term .bar { height: 34px; border-bottom: 1px solid #2a313c; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #1c222b; }
@@ -301,7 +330,11 @@ html, body { margin: 0; width: ${W}px; height: ${H}px; background: #0d1117; over
 .out:first-of-type { }
 .exit { color: #8b949e; }
 .ok { color: #3fb950; margin-right: 4px; }
+.reply { padding-left: 42px !important; text-indent: -22px; color: #e6edf3; }
+.reply .dot { color: #e6edf3; margin-right: 0; }
+.dimp { color: #6e7681; }
 .cur { display: inline-block; width: 10px; height: 21px; margin-left: 2px; background: #e6edf3; vertical-align: -4px; }
+.cur.dimcur { background: #6e7681; }
 .win { position: absolute; left: 580px; top: 84px; width: ${VIEW_W}px; height: 575px; border-radius: 12px; overflow: hidden;
   background: #fff; border: 1px solid #3a4150; }
 .win.ok { border-color: #3ddc97; }
@@ -334,7 +367,7 @@ function html(s) {
   const fwd = '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
   const reload = '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>';
   return `<!doctype html><meta charset="utf-8"><style>${CSS}</style>
-<div class="cap">${CAPTIONS[s.caption]}</div>
+<div class="cap${s.caption === 'x' ? ' bad' : ''}"><span>${CAPTIONS[s.caption]}</span></div>
 <div class="term"><div class="bar"><i></i><i></i><i></i></div><div class="rows">${rows}</div></div>
 <div class="win${s.after ? ' ok' : ''}">
   <div class="tabs"><span class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
@@ -349,9 +382,8 @@ const rpage = await renderer.newPage({ viewport: { width: W, height: H }, device
 const cache = new Map();  // state -> png path
 const sequence = [];
 try {
-  const ticks = Math.round(BEATS.total / TICK);
-  for (let i = 0; i < ticks; i++) {
-    const s = stateAt(i * TICK + 1e-6);
+  for (let i = 0; i < PRE_TICKS + MAIN_TICKS; i++) {
+    const s = i < PRE_TICKS ? problemState(i) : stateAt((i - PRE_TICKS) * TICK + 1e-6);
     const key = JSON.stringify(s);
     if (!cache.has(key)) {
       const file = path.join(framesDir, `f${String(cache.size).padStart(3, '0')}.png`);
@@ -384,8 +416,8 @@ function ffmpeg(...args) {
   const r = spawnSync('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', listFile, ...args], { stdio: 'inherit' });
   if (r.status !== 0) throw new Error(`ffmpeg failed: ${args.join(' ')}`);
 }
-ffmpeg('-vf', `fps=${FPS},split[a][b];[a]palettegen=max_colors=256:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle`, '-t', String(BEATS.total), '-loop', '0', GIF);
-ffmpeg('-vf', 'fps=25,pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:color=0x0d1117,format=yuv420p', '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-movflags', '+faststart', '-an', '-t', String(BEATS.total), MP4);
+ffmpeg('-vf', `fps=${FPS},split[a][b];[a]palettegen=max_colors=256:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle`, '-t', TOTAL_SECONDS.toFixed(2), '-loop', '0', GIF);
+ffmpeg('-vf', 'fps=25,pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:color=0x0d1117,format=yuv420p', '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-movflags', '+faststart', '-an', '-t', TOTAL_SECONDS.toFixed(2), MP4);
 
 const kb = f => (fs.statSync(f).size / 1024).toFixed(0);
 log(`wrote ${GIF} (${kb(GIF)} KB) and ${MP4} (${kb(MP4)} KB)`);
