@@ -48,7 +48,26 @@ untested.
 
 ## Install
 
-Once per machine and per Chrome profile.
+Once per machine and per Chrome profile. Pick one way.
+
+### Option 1: ask your coding agent
+
+Paste this into Claude Code, Codex, Cursor, or any agent that can run shell commands. It does everything except
+loading the helper into Chrome, which Chrome keeps for you; the agent tells you the three clicks.
+
+```text
+Install ext-reload (https://github.com/dominic-lam/ext-reload) so you can reload my unpacked Chrome extension
+yourself, and use it from now on.
+1. If ~/ext-reload does not exist, run: git clone https://github.com/dominic-lam/ext-reload.git ~/ext-reload
+2. Run ~/ext-reload/ext-reload.mjs --ping.
+3. If it exits 4, Chrome is closed or the helper is not loaded. Tell me exactly this, then wait: open
+   chrome://extensions, turn on Developer mode, click Load unpacked, pick ~/ext-reload/extension.
+   Then run --ping again.
+4. Once --ping lists my extensions, copy the "Reloading the extension" block from ~/ext-reload/README.md into
+   this project's agent instructions file (AGENTS.md, CLAUDE.md, or whichever file you read), and follow it.
+```
+
+### Option 2: install it yourself
 
 1. Clone it. Any folder works; the examples here use `~/ext-reload`.
 
@@ -57,30 +76,18 @@ Once per machine and per Chrome profile.
 2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick
    `~/ext-reload/extension`.
 3. Run `~/ext-reload/ext-reload.mjs --ping`. It lists the unpacked extensions Chrome has.
+4. Add the instruction below to your project's agent instructions file (`AGENTS.md`, `CLAUDE.md`, or whichever
+   file your agent reads).
 
 Keep the helper loaded from your clone: Chrome reads the helper's files from wherever it was loaded, and the
 CLI writes its requests into the `extension/inbox/` folder next to itself. The helper's id is
 `aedmcelajgmppcepfnehdcnpolaeoajp` wherever it lives, fixed by the `key` in `extension/manifest.json`.
+Clicking the helper's toolbar icon shows what it is; there is nothing to set.
 
-## For coding agents
+## The instruction for your agent
 
-Two prompts. Swap the path if you cloned somewhere other than `~/ext-reload`; the CLI finds its inbox relative
-to itself.
-
-**Setup, pasted once into the agent:**
-
-```text
-Set up ext-reload so you can reload my unpacked Chrome extension yourself.
-1. Run `~/ext-reload/ext-reload.mjs --ping`.
-2. If it exits 4, Chrome is closed or the helper is not loaded. Tell me exactly this, then wait: open
-   chrome://extensions, turn on Developer mode, click Load unpacked, pick ~/ext-reload/extension.
-   Then run --ping again.
-3. Once --ping lists my extensions, add the "Reloading the extension" instruction from
-   ~/ext-reload/README.md to this project's agent instructions file (AGENTS.md, CLAUDE.md, or whichever
-   file you read).
-```
-
-**Standing instruction, for the project's agent instructions file:**
+Option 1 adds this for you. Swap the path if you cloned somewhere other than `~/ext-reload`; the CLI finds its
+inbox relative to itself.
 
 ```markdown
 ## Reloading the extension

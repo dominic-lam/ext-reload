@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ext-reload helper</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1b1d22; --muted: #5b616e; --line: #e3e5ea; --link: #0b7a52; --note-bg: #eafaf2; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1f2125; --fg: #e8eaee; --muted: #a3a9b4; --line: #33373e; --link: #3ddc97; --note-bg: #1d3329; }
+  }
+  body { margin: 0; width: 300px; background: var(--bg); color: var(--fg); font: 13px/1.45 -apple-system, system-ui, sans-serif; }
+  main { padding: 14px 16px 16px; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  header img { width: 32px; height: 32px; }
+  h1 { font-size: 15px; margin: 0; }
+  p { margin: 0 0 10px; color: var(--muted); }
+  .note { background: var(--note-bg); color: var(--fg); border-radius: 8px; padding: 8px 10px; font-weight: 600; }
+  a { color: var(--link); text-decoration: none; font-weight: 600; }
+  a:hover { text-decoration: underline; }
+  footer { border-top: 1px solid var(--line); padding-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icons/icon-48.png" alt="">
+    <h1>ext-reload helper</h1>
+  </header>
+  <p>Lets your coding agent, or any terminal, reload your unpacked extensions and the tabs they run on, so
+    nobody has to press Reload at chrome://extensions.</p>
+  <p class="note">You don't need to do anything here.</p>
+  <footer><a href="https://github.com/dominic-lam/ext-reload" target="_blank" rel="noopener">github.com/dominic-lam/ext-reload</a></footer>
+</main>
+</body>
+</html>
