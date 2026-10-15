@@ -126,6 +126,22 @@ try {
   r = await run(plainLink, '--no-tabs');
   check(`manifest edit after Chrome's last full load, no dev hook: exit 3 (${r.ms} ms)`, r.code === 3 && /manifest\.json changed at/.test(r.out), r.out);
 
+  // A build rewrites manifest.json with the same contents, so its time changes but Chrome's copy is still current.
+  const rebuild = () => fs.writeFileSync(path.join(plain, 'manifest.json'), fs.readFileSync(path.join(plain, 'manifest.json')));
+  await (await workerOf('plain')).evaluate(() => chrome.runtime.reload()).catch(() => {});
+  await wait(1200);
+  rebuild();
+  r = await run(plainLink, '--no-tabs');
+  check(`first rebuild after a full load, same manifest: exit 0, not 3 (${r.ms} ms)`, r.code === 0 && !/manifest\.json changed/.test(r.out), r.out);
+  await wait(50);
+  rebuild();
+  r = await run(plainLink, '--no-tabs');
+  check('  and every rebuild after it', r.code === 0 && !/manifest\.json changed/.test(r.out), r.out);
+  await wait(50);
+  bumpVersion(plain, '1.2');
+  r = await run(plainLink, '--no-tabs');
+  check('  a real manifest change after them still exits 3', r.code === 3 && /manifest\.json changed at/.test(r.out), r.out);
+
   writeCode(hooked, 'hooked', 'b', true);
   bumpVersion(hooked, '1.1');
   r = await run(hooked);

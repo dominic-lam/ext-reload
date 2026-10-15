@@ -194,6 +194,38 @@ function listExtensions(extensions) {
 // started after a command has finished. The answer lives in extension/update.json, where the helper's popup
 // reads it as well; the helper itself never contacts the network.
 
+// What the CLI has seen of each extension's manifest.json, so that a build rewriting the file with the same
+// contents is not taken for an edit. Kept beside the requests, out of git.
+const MANIFESTS = path.join(INBOX, 'manifests.json');
+
+// Whether Chrome runs the manifest.json now on disk: true, false, or null when the helper has not seen the
+// extension load. Chrome reads an unpacked manifest only at a full load, the one at lastFullLoad.
+// - Not written since that load: Chrome has these contents; remember them for that load.
+// - Written since, and these contents are the ones remembered for that load: a rebuild, nothing new.
+// - Written since, and an earlier run saw these same contents before that load: taken as unchanged across it.
+//   Wrong only if the file changed, was loaded, and changed back, all between two runs.
+// - Anything else is an edit Chrome has not read.
+function manifestLoaded(id, file, lastFullLoad) {
+  const hash = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  const all = readJson(MANIFESTS) ?? {};
+  const seen = all[id] ?? {};
+  let loaded = null;
+  if (lastFullLoad != null) {
+    if (fs.statSync(file).mtimeMs <= lastFullLoad) loaded = true;
+    else if (seen.load === lastFullLoad) loaded = seen.loadedHash === hash;
+    else loaded = seen.seenAt != null && seen.seenAt < lastFullLoad && seen.seenHash === hash;
+  }
+  const next = { seenHash: hash, seenAt: Date.now() };
+  if (loaded) Object.assign(next, { load: lastFullLoad, loadedHash: hash });
+  else if (seen.load === lastFullLoad) Object.assign(next, { load: seen.load, loadedHash: seen.loadedHash });
+  all[id] = next;
+  try {
+    fs.mkdirSync(INBOX, { recursive: true });
+    fs.writeFileSync(MANIFESTS, `${JSON.stringify(all, null, 2)}\n`);
+  } catch {}
+  return loaded;
+}
+
 function readJson(file) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -510,13 +542,15 @@ async function main() {
       console.log(`Failed: ${r.name}: ${r.error}`);
     } else if (r.method === 'self') {
       console.log(`Reloaded ${r.name} ${r.version}: a full reload, manifest.json included.`);
+      if (target && r.id === extensionId(target.dir, target.manifest)) manifestLoaded(r.id, target.file, r.lastFullLoad);
     } else {
       console.log(`Reloaded ${r.name} ${r.version}: service worker and content scripts read again from disk.`);
       if (target == null || r.id !== extensionId(target.dir, target.manifest)) continue;
-      const edited = fs.statSync(target.file).mtimeMs;
-      if (r.lastFullLoad == null) {
+      const loaded = manifestLoaded(r.id, target.file, r.lastFullLoad);
+      if (loaded == null) {
         console.log(`Not checked: whether Chrome has the current manifest.json. The helper has not seen ${r.name} load since it was installed.`);
-      } else if (edited > r.lastFullLoad) {
+      } else if (!loaded) {
+        const edited = fs.statSync(target.file).mtimeMs;
         console.log(`manifest.json changed at ${time(edited)}, after Chrome last read it at ${time(r.lastFullLoad)}; this reload does not pick that up. It needs the Reload button on ${r.name}'s card at chrome://extensions, or the dev hook in the README.`);
         if (code === EXIT.ok) code = EXIT.staleManifest;
       }

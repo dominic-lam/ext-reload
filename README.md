@@ -126,8 +126,13 @@ If ext-reload prints an update notice, tell me; run it with `--update` only when
 Without the hook the helper turns the extension off and on (`chrome.management.setEnabled`). Chrome then reads
 the code again but keeps the manifest it already had: measured 2026-10-14, a changed version and name stayed
 old while the new service worker and content script ran. Missing a manifest edit silently would mean testing
-code that is not loaded, so the CLI compares `manifest.json`'s modification time with the last time Chrome
-read it (browser start, or a full reload the helper saw) and exits 3 when the file is newer.
+code that is not loaded, so the CLI compares `manifest.json` with the last time Chrome read it (browser start, or
+a full reload the helper saw) and exits 3 when the file changed since.
+
+A build that writes `manifest.json` again with the same contents does not count. The CLI remembers the contents
+it has seen, in `extension/inbox/manifests.json`, so only a real change exits 3. Until it has seen a folder's
+manifest once, before or at a full load, it cannot tell a rebuild from an edit, so the first run in a new
+folder can still exit 3 after a build.
 
 Right after the helper is installed it has seen no load yet, and says "Not checked" instead, until Chrome
 restarts or the extension gets a full reload.
