@@ -137,7 +137,7 @@ try {
   fs.mkdirSync(stranger);
   fs.writeFileSync(path.join(stranger, 'manifest.json'), JSON.stringify({ manifest_version: 3, name: 'plain', version: '1.0' }));
   r = await run(stranger);
-  check(`folder Chrome did not load, same name as a loaded one: exit 2, names the other folder (${r.ms} ms)`, r.code === 2 && /different folder/.test(r.out), r.out);
+  check(`folder Chrome did not load, same name as a loaded one: exit 2, says it is loaded from a different folder (${r.ms} ms)`, r.code === 2 && /different folder/.test(r.out) && /worktree, or a build folder/.test(r.out), r.out);
 
   // The red dot: the worker reads update.json every 20 s; calling its check directly skips the wait. A drawing
   // or setIcon failure rejects, which fails the check.

@@ -498,7 +498,7 @@ async function main() {
     const lines = [`Chrome has no unpacked extension with id ${request.ids.join(', ')}${target ? `, the id for ${target.dir}` : ''}.`];
     const name = target && displayName(target);
     const sameName = reply.extensions.find(e => e.name === name);
-    if (sameName) lines.push(`${name} is loaded from a different folder (id ${sameName.id}). A worktree? Chrome runs that folder's code, not this one's.`);
+    if (sameName) lines.push(`${name} is loaded from a different folder (id ${sameName.id}). A worktree, or a build folder? Chrome runs that folder's code, not this one's.`);
     lines.push(`Unpacked extensions in Chrome:\n${listExtensions(reply.extensions)}`);
     fail(EXIT.notLoaded, lines.join('\n'));
   }
